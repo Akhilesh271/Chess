@@ -62,11 +62,11 @@ public class Board {
         this.legalMoves = new HashMap<>(other.legalMoves);
         for (int i = 0; i < 8; i++) {
             for (int j = 0; j < 8; j++) {
-                if (this.board[i][j] instanceof King) {
+                if (this.board[i][j] instanceof King king) {
                     if (this.board[i][j].getColor().equals("white")) {
-                        this.whiteKing = (King) this.board[i][j];
+                        this.whiteKing = king;
                     } else {
-                        this.blackKing = (King) this.board[i][j];
+                        this.blackKing = king;
                     }
                 }
             }

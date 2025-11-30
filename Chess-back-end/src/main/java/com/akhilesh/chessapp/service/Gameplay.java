@@ -46,8 +46,8 @@ public class Gameplay {
     public Board getBoard() {
         // The Strategy Pattern in action:
         // If we are using the OOP engine, we can return the Board object.
-        if (engine instanceof OopEngine) {
-            return ((OopEngine) engine).getBoard();
+        if (engine instanceof OopEngine oopEngine) {
+            return oopEngine.getBoard();
         }
         // If we are using Bitboards, the legacy AI won't work yet.
         System.err.println("WARNING: AI requested Board object but BitboardEngine is active.");
