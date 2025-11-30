@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Chessboard Example</title>
+  <link rel="stylesheet" href="chessboard-1.0.0.min.css">
+  <style>
+    #board {
+      width: 45%;
+      margin: 40px auto;
+    }
+
+    .legal-move {
+        background-color: #eaff81;
+        opacity: 0.9; /* Added transparency */
+        /* Optional: box-shadow for a glowing effect instead of flat color */
+        box-shadow: inset 0 0 3px 3px #98FB98; 
+    }
+  </style>
+</head>
+  <button onclick="board.flip()">Flip board</button>
+  <div id="board"></div>
+  <div id="promotionModal" style="display: none;" class="promotion-modal">
+    <p>Choose promotion piece:</p>
+    <img src="img/chesspieces/wikipedia/wQ.png" onclick="selectPromotion('q')" />
+    <img src="img/chesspieces/wikipedia/wR.png" onclick="selectPromotion('r')" />
+    <img src="img/chesspieces/wikipedia/wB.png" onclick="selectPromotion('b')" />
+    <img src="img/chesspieces/wikipedia/wN.png" onclick="selectPromotion('n')" />
+  </div>
+  <!-- jQuery is required for chessboard.js -->
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+
+  <!-- Your local chessboard.js file -->
+  <script src="chessboard-1.0.0.min.js"></script>
+
+  <script src="script.js"></script>
+
+</body>
+</html>
