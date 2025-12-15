@@ -213,7 +213,7 @@ function coordsToSquare(row, col) {
 }
 
 function fetchBoard() {
-    fetch('http://localhost:8080/chess/fen')
+    fetch('https://chess-2u5e.onrender.com')
         .then(res => res.text())
         .then(fen => board.position(fen))
         .catch(err => console.error(err));
