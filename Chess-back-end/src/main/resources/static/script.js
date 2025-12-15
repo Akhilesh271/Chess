@@ -2,8 +2,19 @@ let legalMovesMap = {};
 let promotionPending = null;
 var board = null; 
 let playerSide = 'white'; 
+let selectedSquare = null;
 
-const BACKEND_URL = "https://chess-2u5e.onrender.com";
+const BACKEND_URL = "https://chess-2u5e.onrender.com"; 
+
+
+$(document).ready(function() {
+    $('#board').on('click', '.square-55d63', function(evt) {
+        const square = $(this).attr('data-square');
+        if (board && !board.position()[square]) {
+            handleSquareClick(square);
+        }
+    });
+});
 
 function startGame(side) {
     playerSide = side;
@@ -95,21 +106,60 @@ function triggerAiMove() {
 
 function onDragStartHandler(source, piece) {
     if (!board) return false;
-    if (playerSide === 'white' && piece.search(/^b/) !== -1) return false;
-    if (playerSide === 'black' && piece.search(/^w/) !== -1) return false;
+
+    // 1. Prevent moving wrong color
+    if ((playerSide === 'white' && piece.search(/^b/) !== -1) ||
+        (playerSide === 'black' && piece.search(/^w/) !== -1)) {
+        if (selectedSquare && isLegalMove(selectedSquare, source)) {
+            attemptMove(selectedSquare, source);
+            clearSelection();
+            return false; // Cancel drag of the enemy piece
+        }
+        return false;
+    }
+
+    // 2. Allow dragging your own piece
+    return true;
 }
 
 function onDropHandler(source, target) {
-    const fromCoords = squareToCoords(source);
-    const toCoords = squareToCoords(target);
-    const key = `${fromCoords[0]},${fromCoords[1]}`;
+    // 1. Handle Click Selection (Source == Target means user clicked, didn't drag)
+    if (source === target) {
+        if (selectedSquare === source) {
+            clearSelection();
+        } else {
+            selectSquare(source);
+        }
+        return 'snapback';
+    }
+
+    // 2. Standard Drag-Move Logic
+    if (isLegalMove(source, target)) {
+        clearSelection(); // Clear selection if valid drag
+        attemptMove(source, target);
+    } else {
+        return 'snapback';
+    }
+}
+
+// Handles clicks on empty squares
+function handleSquareClick(square) {
+    if (selectedSquare) {
+        if (isLegalMove(selectedSquare, square)) {
+            attemptMove(selectedSquare, square);
+            clearSelection();
+        } else {
+            clearSelection();
+        }
+    }
+}
+
+function attemptMove(fromSquare, toSquare) {
+    const fromCoords = squareToCoords(fromSquare);
+    const toCoords = squareToCoords(toSquare);
     
-    const legal = legalMovesMap[key] || [];
-    const isValid = legal.some(move => move.x === toCoords[0] && move.y === toCoords[1]);
-
-    if (!isValid) return 'snapback';
-
-    const piece = board.position()[source];
+    // Check Promotion
+    const piece = board.position()[fromSquare];
     const isWhitePawn = piece === 'wP' && toCoords[0] === 7;
     const isBlackPawn = piece === 'bP' && toCoords[0] === 0;
 
@@ -122,6 +172,29 @@ function onDropHandler(source, target) {
 
     makeMove(fromCoords, toCoords);
 }
+
+
+function selectSquare(square) {
+    $('.square-55d63').removeClass('highlight-selected');
+    selectedSquare = square;
+    $('.square-' + square).addClass('highlight-selected');
+}
+
+function clearSelection() {
+    $('.square-55d63').removeClass('highlight-selected');
+    selectedSquare = null;
+}
+
+function isLegalMove(fromSquare, toSquare) {
+    const fromCoords = squareToCoords(fromSquare); 
+    const toCoords = squareToCoords(toSquare);
+    
+    const key = `${fromCoords[0]},${fromCoords[1]}`;
+    const legalMoves = legalMovesMap[key] || []; 
+    
+    return legalMoves.some(m => m.x === toCoords[0] && m.y === toCoords[1]);
+}
+
 
 function fetchAllLegalMoves() {
     fetch(BACKEND_URL + '/chess/legalMoves')
@@ -199,4 +272,8 @@ function fetchBoard() {
         .then(res => res.text())
         .then(fen => board.position(fen))
         .catch(err => console.error(err));
+}
+
+if (window.board) {
+    window.addEventListener('resize', board.resize);
 }

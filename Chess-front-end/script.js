@@ -1,46 +1,57 @@
-let legalMovesMap = {};
+let legalMovesMap = {}; 
 let promotionPending = null;
-var board = null;
-let playerSide = 'white';
+var board = null; 
+let playerSide = 'white'; 
+let selectedSquare = null;
 
+const BACKEND_URL = "https://chess-2u5e.onrender.com"; 
+
+
+$(document).ready(function() {
+    $('#board').on('click', '.square-55d63', function(evt) {
+        const square = $(this).attr('data-square');
+        if (board && !board.position()[square]) {
+            handleSquareClick(square);
+        }
+    });
+});
 
 function startGame(side) {
     playerSide = side;
-    document.getElementById('startModal').style.display = 'none';
+    document.getElementById('startModal').style.display = 'none'; 
 
-    // Initialize board with the chosen orientation
     board = Chessboard('board', {
         position: 'start',
         draggable: true,
-        orientation: side, // 'white' or 'black'
+        orientation: side, 
         pieceTheme: 'img/chesspieces/wikipedia/{piece}.png',
         onDrop: onDropHandler,
         onDragStart: onDragStartHandler,
     });
+    
+    board.resize();
 
-    // Start the backend session (Using your Render URL)
-    fetch('https://chess-2u5e.onrender.com/chess/start', { method: 'POST' })
+    fetch(BACKEND_URL + '/chess/start', { method: 'POST' })
         .then(() => {
             updateStatus("Game Started. White to move.");
-            fetchBoard();         // Sync board
-            fetchAllLegalMoves(); // Get moves
+            fetchBoard();       
+            fetchAllLegalMoves(); 
 
-            // If user is playing Black, AI (White) must move first immediately
             if (playerSide === 'black') {
                 updateStatus("AI (White) is thinking...");
-                setTimeout(triggerAiMove, 500); // Small delay
+                setTimeout(triggerAiMove, 500); 
             }
         })
         .catch(err => console.error("Error starting game:", err));
 }
-
 
 function makeMove(from, to, promotion = null) {
     const fromX = from[0];
     const fromY = from[1];
     const toX = to[0];
     const toY = to[1];
-    let url = `https://chess-2u5e.onrender.com/chess/move?fromX=${fromX}&fromY=${fromY}&toX=${toX}&toY=${toY}`;
+
+    let url = `${BACKEND_URL}/chess/move?fromX=${fromX}&fromY=${fromY}&toX=${toX}&toY=${toY}`;
     if (promotion) {
         url += `&promotion=${promotion}`;
     }
@@ -55,44 +66,35 @@ function makeMove(from, to, promotion = null) {
                 console.error("Invalid move:", data.error);
                 return;
             }
-            
-            // 1. Update Board
-            board.position(data);
-            
-            // 2. Refresh Legal Moves for the next turn
-            fetchAllLegalMoves();
-
-            // 3. Trigger AI if the game isn't over
+            board.position(data); 
+            fetchAllLegalMoves(); 
             triggerAiMove();
         })
         .catch(error => {
             console.error('Move error:', error);
-            fetchBoard(); // Fallback sync
+            fetchBoard(); 
         });
 }
 
 function triggerAiMove() {
     updateStatus("AI is thinking...");
     
-    // UPDATED URL
-    fetch('https://chess-2u5e.onrender.com/chess/aiMove')
+    fetch(BACKEND_URL + '/chess/aiMove')
         .then(res => {
             if (!res.ok) throw new Error('AI Error');
-            // Handle plain text "Game Over" or JSON
             return res.text().then(text => {
                 try {
                     return JSON.parse(text);
                 } catch {
-                    return text; // It's likely a "Game Over" string
+                    return text; 
                 }
             });
         })
         .then(data => {
             if (typeof data === 'string') {
-                updateStatus(data); // "Checkmate" or "Draw"
+                updateStatus(data); 
             } else {
-                // AI moved successfully
-                board.position(data);
+                board.position(data); 
                 fetchAllLegalMoves();
                 updateStatus("Your Turn");
             }
@@ -102,28 +104,62 @@ function triggerAiMove() {
         });
 }
 
-
 function onDragStartHandler(source, piece) {
-    // Prevent moving if game hasn't started
     if (!board) return false;
 
-    // Prevent moving opponent's pieces
-    if (playerSide === 'white' && piece.search(/^b/) !== -1) return false;
-    if (playerSide === 'black' && piece.search(/^w/) !== -1) return false;
+    // 1. Prevent moving wrong color
+    if ((playerSide === 'white' && piece.search(/^b/) !== -1) ||
+        (playerSide === 'black' && piece.search(/^w/) !== -1)) {
+        if (selectedSquare && isLegalMove(selectedSquare, source)) {
+            attemptMove(selectedSquare, source);
+            clearSelection();
+            return false; // Cancel drag of the enemy piece
+        }
+        return false;
+    }
+
+    // 2. Allow dragging your own piece
+    return true;
 }
 
 function onDropHandler(source, target) {
-    const fromCoords = squareToCoords(source);
-    const toCoords = squareToCoords(target);
-    const key = `${fromCoords[0]},${fromCoords[1]}`;
+    // 1. Handle Click Selection (Source == Target means user clicked, didn't drag)
+    if (source === target) {
+        if (selectedSquare === source) {
+            clearSelection();
+        } else {
+            selectSquare(source);
+        }
+        return 'snapback';
+    }
+
+    // 2. Standard Drag-Move Logic
+    if (isLegalMove(source, target)) {
+        clearSelection(); // Clear selection if valid drag
+        attemptMove(source, target);
+    } else {
+        return 'snapback';
+    }
+}
+
+// Handles clicks on empty squares
+function handleSquareClick(square) {
+    if (selectedSquare) {
+        if (isLegalMove(selectedSquare, square)) {
+            attemptMove(selectedSquare, square);
+            clearSelection();
+        } else {
+            clearSelection();
+        }
+    }
+}
+
+function attemptMove(fromSquare, toSquare) {
+    const fromCoords = squareToCoords(fromSquare);
+    const toCoords = squareToCoords(toSquare);
     
-    const legal = legalMovesMap[key] || [];
-    const isValid = legal.some(move => move.x === toCoords[0] && move.y === toCoords[1]);
-
-    if (!isValid) return 'snapback';
-
-    // Promotion Logic
-    const piece = board.position()[source];
+    // Check Promotion
+    const piece = board.position()[fromSquare];
     const isWhitePawn = piece === 'wP' && toCoords[0] === 7;
     const isBlackPawn = piece === 'bP' && toCoords[0] === 0;
 
@@ -138,8 +174,30 @@ function onDropHandler(source, target) {
 }
 
 
+function selectSquare(square) {
+    $('.square-55d63').removeClass('highlight-selected');
+    selectedSquare = square;
+    $('.square-' + square).addClass('highlight-selected');
+}
+
+function clearSelection() {
+    $('.square-55d63').removeClass('highlight-selected');
+    selectedSquare = null;
+}
+
+function isLegalMove(fromSquare, toSquare) {
+    const fromCoords = squareToCoords(fromSquare); 
+    const toCoords = squareToCoords(toSquare);
+    
+    const key = `${fromCoords[0]},${fromCoords[1]}`;
+    const legalMoves = legalMovesMap[key] || []; 
+    
+    return legalMoves.some(m => m.x === toCoords[0] && m.y === toCoords[1]);
+}
+
+
 function fetchAllLegalMoves() {
-    fetch('https://chess-2u5e.onrender.com/chess/legalMoves')
+    fetch(BACKEND_URL + '/chess/legalMoves')
       .then(res => res.json())
       .then(data => {
         const normalized = {};
@@ -158,15 +216,12 @@ function fetchAllLegalMoves() {
       .catch(err => console.error(err));
 }
 
-// Highlight squares (using the CSS class defined in style.css)
 function highlightAllLegalMoves() {
   $('.square-55d63').removeClass('legal-move-indicator');
-
   for (const startSquareKey in legalMovesMap) {
     const moves = legalMovesMap[startSquareKey];
     moves.forEach(move => {
         const squareId = coordsToSquare(move.x, move.y);
-        // Add specific class for CSS styling
         $('.square-' + squareId).addClass('legal-move-indicator');
     });
   }
@@ -179,7 +234,6 @@ function updateStatus(text) {
 
 function showPromotionModal(color) {
     const modal = document.getElementById('promotionModal');
-    // Get images from chessboard.js
     modal.innerHTML = `
       <p>Promote to:</p>
       <div style="display:flex; gap:10px; justify-content:center;">
@@ -199,7 +253,6 @@ function selectPromotion(type) {
     makeMove(fromCoords, toCoords, type);
 }
 
-// Coordinate Converters
 function squareToCoords(square) {
     const file = square.charAt(0);
     const rank = parseInt(square.charAt(1));
@@ -215,13 +268,12 @@ function coordsToSquare(row, col) {
 }
 
 function fetchBoard() {
-    fetch('https://chess-2u5e.onrender.com/chess/fen')
+    fetch(BACKEND_URL + '/chess/fen')
         .then(res => res.text())
         .then(fen => board.position(fen))
         .catch(err => console.error(err));
 }
 
-// Keep board responsive
 if (window.board) {
     window.addEventListener('resize', board.resize);
 }
