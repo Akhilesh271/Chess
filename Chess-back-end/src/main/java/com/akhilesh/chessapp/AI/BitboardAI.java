@@ -10,7 +10,7 @@ import java.util.List;
 @Service
 public class BitboardAI {
 
-    private static final int MAX_DEPTH = 3; // Start small. 4 is usually a good balance for Java.
+    private static final int MAX_DEPTH = 4; // Start small. 4 is usually a good balance for Java.
     private static final int CHECKMATE_SCORE = 100000;
 
     // Piece Values (P, N, B, R, Q, K)

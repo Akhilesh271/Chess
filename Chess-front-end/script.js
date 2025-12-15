@@ -1,109 +1,149 @@
-let legalMovesMap = {}; // To store legal moves from the backend
+let legalMovesMap = {};
 let promotionPending = null;
-var board = null; // Will be initialized later
+var board = null;
+let playerSide = 'white';
+
+
+function startGame(side) {
+    playerSide = side;
+    document.getElementById('startModal').style.display = 'none';
+
+    // Initialize board with the chosen orientation
+    board = Chessboard('board', {
+        position: 'start',
+        draggable: true,
+        orientation: side, // white or black
+        pieceTheme: 'img/chesspieces/wikipedia/{piece}.png',
+        onDrop: onDropHandler,
+        onDragStart: onDragStartHandler,
+    });
+
+    // Start the backend session
+    fetch('http://localhost:8080/chess/start', { method: 'POST' })
+        .then(() => {
+            updateStatus("Game Started. White to move.");
+            fetchBoard();       // Sync board
+            fetchAllLegalMoves(); // Get moves
+
+            // If user is playing Black, AI (White) must move first immediately
+            if (playerSide === 'black') {
+                updateStatus("AI (White) is thinking...");
+                setTimeout(triggerAiMove, 500); // Small delay
+            }
+        })
+        .catch(err => console.error("Error starting game:", err));
+}
+
 
 function makeMove(from, to, promotion = null) {
-  const fromX = from[0];
-  const fromY = from[1];
-  const toX = to[0];
-  const toY = to[1];
+    const fromX = from[0];
+    const fromY = from[1];
+    const toX = to[0];
+    const toY = to[1];
 
-  let url = `http://localhost:8080/chess/move?fromX=${fromX}&fromY=${fromY}&toX=${toX}&toY=${toY}`;
-  if (promotion) {
-    url += `&promotion=${promotion}`;
-  }
+    let url = `http://localhost:8080/chess/move?fromX=${fromX}&fromY=${fromY}&toX=${toX}&toY=${toY}`;
+    if (promotion) {
+        url += `&promotion=${promotion}`;
+    }
 
-  console.log('Sending move to backend via URL:', url);
+    fetch(url)
+        .then(response => {
+            if (!response.ok) throw new Error('Move failed');
+            return response.json();
+        })
+        .then(data => {
+            if (data.error) {
+                console.error("Invalid move:", data.error);
+                return;
+            }
+            
+            // 1. Update Board
+            board.position(data);
+            
+            // 2. Refresh Legal Moves for the next turn
+            fetchAllLegalMoves();
 
-  fetch(url)
-    .then(response => {
-      if (!response.ok) {
-        throw new Error(`Failed to send move: ${response.statusText}`);
-      }
-      return response.json();
-    })
-    .then(data => {
-      console.log('Move result:', data);
-      board.position(data); // <--- This works perfectly with the Piece Map!
-      fetchAllLegalMoves();
-
-      // --- INTEGRATION: Trigger AI move after a successful human move ---
-      if (!data.error) {
-          // If the move was successful, it's now the AI's turn
-          triggerAiMove();
-      }
-      // -----------------------------------------------------------------
-    })
-    .catch(error => {
-      console.error('Move error:', error);
-      fetchBoard(); // Fallback to ensure the board is in a consistent state
-    });
-}
-
-
-// --- NEW FUNCTION TO CALL AI ENDPOINT ---
-function triggerAiMove() {
-  console.log("AI is calculating its move...");
-  fetch('http://localhost:8080/chess/aiMove')
-    .then(res => {
-      if (!res.ok) {
-        return res.text().then(text => {
-          throw new Error(`AI Endpoint returned an error: ${text}`);
+            // 3. Trigger AI if the game isn't over
+            triggerAiMove();
+        })
+        .catch(error => {
+            console.error('Move error:', error);
+            fetchBoard(); // Fallback sync
         });
-      }
-      // Try to parse as JSON, if it fails, it might be a "Game over" string
-      return res.json().catch(() => res.text());
-    })
-    .then(data => {
-      if (typeof data === 'string') {
-        console.log(data); // "Game over" message
-      } else if (data) {
-        console.log("AI move successful. New board state received.");
-        board.position(data);
-      }
-      fetchAllLegalMoves();
-    })
-    .catch(error => {
-      console.error("Error making AI move:", error);
-      fetchBoard();
-    });
+}
+
+function triggerAiMove() {
+    updateStatus("AI is thinking...");
+    
+    fetch('http://localhost:8080/chess/aiMove')
+        .then(res => {
+            if (!res.ok) throw new Error('AI Error');
+            // Handle plain text "Game Over" or JSON
+            return res.text().then(text => {
+                try {
+                    return JSON.parse(text);
+                } catch {
+                    return text; // It's likely a "Game Over" string
+                }
+            });
+        })
+        .then(data => {
+            if (typeof data === 'string') {
+                updateStatus(data); // "Checkmate" or "Draw"
+            } else {
+                // AI moved successfully
+                board.position(data);
+                fetchAllLegalMoves();
+                updateStatus("Your Turn");
+            }
+        })
+        .catch(error => {
+            console.error("AI Move failed:", error);
+        });
 }
 
 
-// Convert square notation (e.g., 'a1', 'h8') to row/column indices
-// 'a1' → [0, 0], 'h8' → [7, 7]
-function squareToCoords(square) {
-    const file = square.charAt(0); // 'a'–'h'
-    const rank = parseInt(square.charAt(1)); // '1'–'8'
+function onDragStartHandler(source, piece) {
+    // Prevent moving if game hasn't started
+    if (!board) return false;
 
-    const col = file.charCodeAt(0) - 'a'.charCodeAt(0); // 'a' → 0
-    const row = rank - 1; // '1' → 0, '8' → 7
+    if (playerSide === 'white' && piece.search(/^b/) !== -1) return false;
+    if (playerSide === 'black' && piece.search(/^w/) !== -1) return false;
+}
 
-    return [row, col];
-  }
+function onDropHandler(source, target) {
+    const fromCoords = squareToCoords(source);
+    const toCoords = squareToCoords(target);
+    const key = `${fromCoords[0]},${fromCoords[1]}`;
+    
+    const legal = legalMovesMap[key] || [];
+    const isValid = legal.some(move => move.x === toCoords[0] && move.y === toCoords[1]);
 
-  // [0, 0] → 'a1', [7, 7] → 'h8'
-  function coordsToSquare(row, col) {
-    const file = String.fromCharCode('a'.charCodeAt(0) + col); // 0 → 'a'
-    const rank = row + 1; // 0 → '1'
+    if (!isValid) return 'snapback';
 
-    return file + rank;
-  }
+    // Promotion Logic
+    const piece = board.position()[source];
+    const isWhitePawn = piece === 'wP' && toCoords[0] === 7;
+    const isBlackPawn = piece === 'bP' && toCoords[0] === 0;
+
+    if (isWhitePawn || isBlackPawn) {
+        promotionPending = { fromCoords, toCoords };
+        const color = piece.charAt(0); 
+        showPromotionModal(color);
+        return;
+    }
+
+    makeMove(fromCoords, toCoords);
+}
 
 
-// Fetch all legal moves from the backend and store them in a global map
 function fetchAllLegalMoves() {
     fetch('http://localhost:8080/chess/legalMoves')
       .then(res => res.json())
       .then(data => {
-        console.log("Fetched raw legalMoves from backend:", data);
-
         const normalized = {};
         for (const key in data) {
-          if (!key.includes("x=") || !key.includes("y=")) {
-            continue; 
-          }
-
+          if (!key.includes("x=") || !key.includes("y=")) continue;
           const match = key.match(/x=(\d+),\s*y=(\d+)/);
           if (match) {
             const row = parseInt(match[1]);
@@ -111,152 +151,72 @@ function fetchAllLegalMoves() {
             normalized[`${row},${col}`] = data[key];
           }
         }
-
-        console.log("Normalized legalMovesMap:", normalized);
         legalMovesMap = normalized;
-        
-        // --- NEW LINE ADDED HERE ---
-        highlightAllLegalMoves(); 
-        // ---------------------------
+        highlightAllLegalMoves();
       })
-      .catch(err => console.error("Failed to fetch legal moves", err));
+      .catch(err => console.error(err));
 }
 
+// // Highlight squares (using the CSS class defined in style.css)
+// function highlightAllLegalMoves() {
+//   $('.square-55d63').removeClass('legal-move-indicator');
 
+//   for (const startSquareKey in legalMovesMap) {
+//     const moves = legalMovesMap[startSquareKey];
+//     moves.forEach(move => {
+//         const squareId = coordsToSquare(move.x, move.y);
+//         // Add specific class for CSS styling
+//         $('.square-' + squareId).addClass('legal-move-indicator');
+//     });
+//   }
+// }
 
-
-// Handler for when a piece is being dragged
-function onDragStartHandler(source, piece, position, orientation) {
-    console.log("onDragStartHandler triggered!", source, piece);
-  const [row, col] = squareToCoords(source);
-  const key = `${row},${col}`;
-
-  // Get the legal moves for the piece being dragged
-  const legal = legalMovesMap[key] || [];
-  // No highlighting needed, we're just restricting the moves in onDropHandler
-}
-
-// Handler for when a piece is dropped on the board
-function onDropHandler(source, target) {
-    console.log("onDropHandler triggered!", source, "→", target);
-
-    const fromCoords = squareToCoords(source);
-    const toCoords = squareToCoords(target);
-
-    const key = `${fromCoords[0]},${fromCoords[1]}`;
-    const legal = legalMovesMap[key] || [];
-
-    console.log("From coords:", fromCoords);
-    console.log("To coords:", toCoords);
-    console.log("Key used:", key);
-    console.log("Legal moves for this key:", legal);
-
-    const isValid = legal.some(move => move.x === toCoords[0] && move.y === toCoords[1]);
-    console.log("Is move valid?", isValid);
-
-    if (!isValid) {
-      console.log("Move rejected. Snapping back.");
-      return 'snapback';
-    }
-
-    const piece = board.position()[source];
-    const isWhitePawn = piece === 'wP' && toCoords[0] === 7;
-    const isBlackPawn = piece === 'bP' && toCoords[0] === 0;
-
-    if (isWhitePawn || isBlackPawn) {
-      promotionPending = { fromCoords, toCoords };
-      const color = piece.charAt(0); // 'w' or 'b'
-      showPromotionModal(color);
-      return;
-    }
-
-    makeMove(fromCoords, toCoords);
-  }
-
-
-// Initialize the chessboard
-board = Chessboard('board', {
-  position: 'start',  // Position set to 'start' to initiate the game from the beginning
-  draggable: true,
-  orientation: 'white',
-  pieceTheme: 'img/chesspieces/wikipedia/{piece}.png',
-  onDrop: onDropHandler,
-  onDragStart: onDragStartHandler,
-});
-
-document.addEventListener('keydown', function(event) {
-  if (event.key === 'f' || event.key === 'F') {
-    board.flip();
-  }
-});
-
-// Call fetchAllLegalMoves to get legal moves when the game starts or after every move
-fetchAllLegalMoves();
-
-function flipBoard(event) {
-   board.flip;
+function updateStatus(text) {
+    document.getElementById('status').innerText = text;
 }
 
 function showPromotionModal(color) {
     const modal = document.getElementById('promotionModal');
+    // Get images from chessboard.js
     modal.innerHTML = `
-      <p>Choose promotion piece:</p>
-      <img src="img/chesspieces/wikipedia/${color}Q.png" onclick="selectPromotion('q')" />
-      <img src="img/chesspieces/wikipedia/${color}R.png" onclick="selectPromotion('r')" />
-      <img src="img/chesspieces/wikipedia/${color}B.png" onclick="selectPromotion('b')" />
-      <img src="img/chesspieces/wikipedia/${color}N.png" onclick="selectPromotion('n')" />
+      <p>Promote to:</p>
+      <div style="display:flex; gap:10px; justify-content:center;">
+          <img src="img/chesspieces/wikipedia/${color}Q.png" onclick="selectPromotion('q')" />
+          <img src="img/chesspieces/wikipedia/${color}R.png" onclick="selectPromotion('r')" />
+          <img src="img/chesspieces/wikipedia/${color}B.png" onclick="selectPromotion('b')" />
+          <img src="img/chesspieces/wikipedia/${color}N.png" onclick="selectPromotion('n')" />
+      </div>
     `;
     modal.style.display = 'block';
-  }
+}
 
-  function selectPromotion(promotionType) {
+function selectPromotion(type) {
     const { fromCoords, toCoords } = promotionPending;
     promotionPending = null;
-
     document.getElementById('promotionModal').style.display = 'none';
+    makeMove(fromCoords, toCoords, type);
+}
 
-    makeMove(fromCoords, toCoords, promotionType);
-  }
+// Coordinate Converters
+function squareToCoords(square) {
+    const file = square.charAt(0);
+    const rank = parseInt(square.charAt(1));
+    const col = file.charCodeAt(0) - 'a'.charCodeAt(0);
+    const row = rank - 1;
+    return [row, col];
+}
+
+function coordsToSquare(row, col) {
+    const file = String.fromCharCode('a'.charCodeAt(0) + col);
+    const rank = row + 1;
+    return file + rank;
+}
 
 function fetchBoard() {
-    // Use the specific FEN endpoint we created for the Bitboard engine
     fetch('http://localhost:8080/chess/fen')
-        .then(res => res.text()) // Get raw string, not JSON
-        .then(fenString => {
-            console.log("Synced Board FEN:", fenString);
-            board.position(fenString);
-        })
-        .catch(err => console.error("Error fetching board:", err));
+        .then(res => res.text())
+        .then(fen => board.position(fen))
+        .catch(err => console.error(err));
 }
 
-// Start the game by fetching the initial board state and legal moves
-fetch('http://localhost:8080/chess/start', { method: 'POST' })
-  .then(() => {
-      fetchBoard();
-      fetchAllLegalMoves();
-  });
-
-  // NEW: Function to highlight all squares that are legal destinations
-function highlightAllLegalMoves() {
-  // 1. Clear previous highlights
-  // chessboard.js uses the class 'square-55d63' for all squares.
-  $('.square-55d63').removeClass('legal-move');
-
-  // 2. Iterate over the global legalMovesMap
-  // format: "row,col": [ {x: 2, y: 3}, ... ]
-  for (const startSquareKey in legalMovesMap) {
-    if (legalMovesMap.hasOwnProperty(startSquareKey)) {
-      const moves = legalMovesMap[startSquareKey];
-      
-      // 3. Loop through every target move for this piece
-      moves.forEach(move => {
-        // Convert the backend coordinates (x,y) to 'a1', 'e4' notation
-        const squareId = coordsToSquare(move.x, move.y);
-        
-        // 4. Find the square using jQuery and add the class
-        // chessboard.js adds classes like 'square-a1', 'square-e4' to the divs
-        $('.square-' + squareId).addClass('legal-move');
-      });
-    }
-  }
-}
+window.addEventListener('resize', board.resize);
