@@ -3,7 +3,6 @@ let promotionPending = null;
 var board = null;
 let playerSide = 'white';
 
-// --- 1. GAME START & SETUP ---
 
 function startGame(side) {
     playerSide = side;
@@ -35,15 +34,12 @@ function startGame(side) {
         .catch(err => console.error("Error starting game:", err));
 }
 
-// --- 2. MOVES & LOGIC ---
 
 function makeMove(from, to, promotion = null) {
     const fromX = from[0];
     const fromY = from[1];
     const toX = to[0];
     const toY = to[1];
-
-    // UPDATED URL
     let url = `https://chess-2u5e.onrender.com/chess/move?fromX=${fromX}&fromY=${fromY}&toX=${toX}&toY=${toY}`;
     if (promotion) {
         url += `&promotion=${promotion}`;
@@ -106,7 +102,6 @@ function triggerAiMove() {
         });
 }
 
-// --- 3. EVENT HANDLERS ---
 
 function onDragStartHandler(source, piece) {
     // Prevent moving if game hasn't started
@@ -142,10 +137,8 @@ function onDropHandler(source, target) {
     makeMove(fromCoords, toCoords);
 }
 
-// --- 4. UTILITIES ---
 
 function fetchAllLegalMoves() {
-    // UPDATED URL
     fetch('https://chess-2u5e.onrender.com/chess/legalMoves')
       .then(res => res.json())
       .then(data => {
@@ -222,7 +215,6 @@ function coordsToSquare(row, col) {
 }
 
 function fetchBoard() {
-    // UPDATED URL
     fetch('https://chess-2u5e.onrender.com/chess/fen')
         .then(res => res.text())
         .then(fen => board.position(fen))
