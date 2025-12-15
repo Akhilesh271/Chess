@@ -1,13 +1,158 @@
 <!DOCTYPE html>
 <html lang="en">
-    <head>
-        <meta charset="UTF-8">
-        <title>Chess App</title>
-        <link rel="stylesheet" href="style.css">
-    </head>
-    <body>
-        <h1>Chess game</h1>
-        <div id="board" class="chess-board"></div>
-        <script class="script.js"></script>
-    </body>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chess Engine</title>
+    
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.css">
+    
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.js"></script>
+
+    <style>
+        /* --- CRITICAL SIZING FIX --- */
+        #board {
+            width: 450px !important;
+            height: 450px !important;
+            margin: 0 auto; 
+        }
+
+        /* --- DARK THEME & LAYOUT --- */
+        body {
+            background-color: #262421;
+            color: #e0e0e0;
+            font-family: 'Segoe UI', Helvetica, Arial, sans-serif;
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            min-height: 100vh;
+            padding-top: 50px;
+        }
+
+        .main-container {
+            display: flex;
+            flex-direction: row;
+            justify-content: center;
+            gap: 2rem;
+            max-width: 900px;
+            width: 100%;
+        }
+
+        .sidebar {
+            width: 300px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .panel {
+            background: #302e2c;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+
+        .btn {
+            border: none;
+            padding: 12px;
+            width: 100%;
+            cursor: pointer;
+            border-radius: 4px;
+            margin-bottom: 10px;
+            font-weight: bold;
+        }
+        .btn-white { background: #f0f0f0; color: #333; }
+        .btn-black { background: #333; color: #fff; border: 1px solid #555; }
+        .btn-secondary { background: #454545; color: #fff; }
+
+        /* Modal Overlay */
+        .modal-overlay {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.85);
+            z-index: 1000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        .modal-content {
+            background: #302e2c;
+            padding: 40px;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        /* Promotion Modal */
+        .promotion-modal {
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            display: none;
+            z-index: 2000;
+        }
+        .promotion-modal img { width: 50px; cursor: pointer; }
+        
+        /* Legal Move Indicator (Green Dot) */
+        .legal-move-indicator {
+            background: radial-gradient(rgba(20, 85, 30, 0.5) 19%, rgba(0, 0, 0, 0) 20%);
+        }
+
+        /* Mobile Fix */
+        @media (max-width: 800px) {
+            .main-container { flex-direction: column; align-items: center; }
+            #board { width: 100% !important; max-width: 450px; }
+            .sidebar { width: 100%; max-width: 450px; }
+        }
+    </style>
+</head>
+<body>
+
+  <div id="startModal" class="modal-overlay">
+    <div class="modal-content">
+      <h1>New Game</h1>
+      <p>Select your side</p>
+      <br>
+      <div style="display:flex; gap:10px; justify-content: center;">
+        <button class="btn btn-white" style="width: auto;" onclick="startGame('white')">Play White</button>
+        <button class="btn btn-black" style="width: auto;" onclick="startGame('black')">Play Black</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="promotionModal" class="promotion-modal">
+      </div>
+
+  <div class="main-container">
+    <div id="board"></div>
+
+    <div class="sidebar">
+      <div class="panel">
+        <h2 style="margin-top:0; color:#888;">Status</h2>
+        <div id="status" style="font-size: 1.2rem; font-weight: bold;">Waiting...</div>
+      </div>
+
+      <div class="panel">
+        <button class="btn btn-secondary" onclick="board.flip()">Flip Board</button>
+        <button class="btn btn-secondary" style="background-color: #be4646;" onclick="location.reload()">Reset Game</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+  
+  <script>
+    // FORCE RESIZE ON LOAD
+    window.addEventListener('load', function() {
+        if(board) board.resize();
+    });
+    window.addEventListener('resize', function() {
+        if(board) board.resize();
+    });
+  </script>
+</body>
 </html>
