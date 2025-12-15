@@ -138,7 +138,7 @@ function fetchAllLegalMoves() {
           }
         }
         legalMovesMap = normalized;
-        highlightAllLegalMoves();
+        // highlightAllLegalMoves();
       })
       .catch(err => console.error(err));
 }
